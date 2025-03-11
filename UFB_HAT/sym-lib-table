@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "_ufb_hat")(type "KiCad")(uri "${KIPRJMOD}/ufb_hat.kicad_sym")(options "")(descr ""))
+)
