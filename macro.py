@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import codecs
@@ -6,7 +6,7 @@ import enum
 import gpiozero
 import os
 import sys
-import time
+import datetime
 
 uOut = gpiozero.LED(14)
 dOut = gpiozero.LED(15)
@@ -30,9 +30,9 @@ oIn = gpiozero.Button(16)
 
 
 class click:
-    def __init__(self, button, time):
+    def __init__(self, button, timing):
         self.button = button
-        self.time = time
+        self.timing = timing
 
 
 class hold:
@@ -43,7 +43,7 @@ class hold:
         self.stopTime = stop
 
 
-class OutputMode(enum):
+class OutputMode(enum.Enum):
     ONE = 0
     ON = 1
     OFF = 2
@@ -88,70 +88,87 @@ def output(btn, mode: OutputMode):
         out.off()
 
 
+def main(filepath):
+    # ファイル読込
+    with codecs.open(filepath, "r", "utf8") as f:
+        lines = f.readlines()
+    # データー読込
+    startButton: str
+    list = []
+    t1: datetime.timedelta
+    t2: datetime.timedelta
+    for i in range(len(lines) - 1):
+        cell = lines[i + 1].lower().split(",")
+        btn = cell[0][:1]
+        cmd = cell[0][1:]
+        tmg = datetime.datetime.strptime(cell[2], "%H:%M:%S:%f")
+        # print(btn, ":", cmd, ":", tmg.strftime("%H:%M:%S:%f"))
+        if i == 0:
+            startButton = btn
+            st = tmg
+            # print(startButton, st.strftime("%H:%M:%S:%f"))
+        elif not cmd:
+            obj = click(btn, tmg - st)
+            list.append(obj)
+            # print(obj.button, obj.timing.total_seconds())
+        elif cmd == "on":
+            t1 = tmg - st
+        elif cmd == "off":
+            t2 = tmg - st
+            obj = hold(btn, t1, t2)
+            list.append(obj)
+            # print(obj.button, obj.startTime.total_seconds(), obj.stopTime.total_seconds())
+        elif cmd == "start":
+            t1 = tmg - st
+        elif cmd == "stop":
+            t2 = tmg - st
+            # print("repeat", btn, t1.total_seconds(), t2.total_seconds())
+            while t1 + datetime.timedelta(seconds=0.05) < t2:
+                obj = click(btn, t1)
+                list.append(obj)
+                # print(obj.button, obj.timing.total_seconds())
+                t1 += datetime.timedelta(seconds=0.1)
+        else:
+            print("Command error!")
+            sys.exit()
+    # 開始待ち
+    print("Wait", startButton, "Button")
+    while True:
+        if (
+            (startButton == "s" and sIn.is_active)
+            or (startButton == "t" and tIn.is_active)
+            or (startButton == "x" and xIn.is_active)
+            or (startButton == "o" and oIn.is_active)
+        ):
+            break
+    # 出力
+    startTime = datetime.datetime.now()
+    print("Start", startTime)
+    while len(list) > 0:
+        now = datetime.datetime.now()
+        if type(list[0]) is click:
+            if list[0].timing <= now - startTime:
+                print(now - startTime, list[0].button)
+                output(list[0].button, OutputMode.ONE)
+                list.pop(0)
+        elif type(list[0]) is hold:
+            if not list[0].state and list[0].startTime <= now - startTime:
+                print(now - startTime, list[0].button, "ON")
+                output(list[0].button, OutputMode.ON)
+                list[0].state = True
+            elif list[0].state and list[0].stopTime <= now - startTime:
+                print(now - startTime, list[0].button, "OFF")
+                output(list[0].button, OutputMode.OFF)
+                list.pop(0)
+
+
 # 引数確認
 if __name__ == "__main__":
     args = sys.argv
     if 2 <= len(args):
-        if not os.path.isfile(args[1]):
-            print("ファイルがみつかりません")
-            sys.exit()
+        if os.path.isfile(args[1]):
+            main(args[1])
+        else:
+            print("File not found.")
     else:
-        print("ファイルを指定してください")
-        sys.exit()
-# ファイル読込
-with codecs.open(args[1], "r", "utf8") as f:
-    lines = f.readlines()
-# データー読込
-list = []
-for s in lines:
-    if s.startswith("start"):
-        start = s.split("=")[1].strip()
-    elif s.startswith("wait"):
-        wait = float(s.split("=")[1].strip())
-    elif s.startswith("c"):
-        c = s.split()
-        t = float(c[2])
-        obj = click(c[1], t)
-        list.append(obj)
-    elif s.startswith("r"):
-        c = s.split()
-        t1 = float(c[2])
-        t2 = float(c[3])
-        while t1 + 0.05 < t2:
-            obj = click(c[1], round(t1, 2))
-            list.append(obj)
-            t1 += 0.1
-    elif s.startswith("l"):
-        c = s.split()
-        t1 = float(c[2])
-        t2 = float(c[3])
-        obj = hold(c[1], t1, t2)
-        list.append(obj)
-# 開始待ち
-print("Wait", start, "Button")
-while True:
-    if (
-        (start == "s" and sIn.is_active)
-        or (start == "t" and tIn.is_active)
-        or (start == "x" and xIn.is_active)
-        or (start == "o" and oIn.is_active)
-    ):
-        break
-# 出力
-startTime = time.time() + wait
-print("Start")
-while len(list) > 0:
-    if type(list[0]) is click:
-        if startTime + list[0].time <= time.time():
-            print(round(time.time() - startTime, 2), list[0].button)
-            output(list[0].button, OutputMode.ONE)
-            list.pop(0)
-    elif type(list[0]) is hold:
-        if not list[0].state and startTime + list[0].startTime <= time.time():
-            print(round(time.time() - startTime, 2), list[0].button, "ON")
-            output(list[0].button, OutputMode.ON)
-            list[0].state = True
-        elif list[0].state and startTime + list[0].stopTime <= time.time():
-            print(round(time.time() - startTime, 2), list[0].button, "OFF")
-            output(list[0].button, OutputMode.OFF)
-            list.pop(0)
+        print("File required.")
