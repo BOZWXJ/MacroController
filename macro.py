@@ -29,13 +29,13 @@ xIn = gpiozero.Button(26)
 oIn = gpiozero.Button(16)
 
 
-class click:
+class Click:
     def __init__(self, button, timing):
         self.button = button
         self.timing = timing
 
 
-class hold:
+class Hold:
     def __init__(self, button, start, stop):
         self.button = button
         self.state = False
@@ -47,6 +47,65 @@ class OutputMode(enum.Enum):
     ONE = 0
     ON = 1
     OFF = 2
+
+
+class State:
+    def __init__(self):
+        self.button = ""
+        self.hFlg = False
+        self.rFlg = False
+
+    def CheckReset(self):
+        if self.hFlg:
+            print("Off command not found")
+            sys.exit()
+        if self.rFlg:
+            print("Stop command not found")
+            sys.exit()
+
+    def HoldSet(self, button):
+        if self.hFlg:
+            print("Off command not found")
+            sys.exit()
+        if self.rFlg:
+            print("Stop command not found")
+            sys.exit()
+        self.button = button
+        self.hFlg = True
+
+    def HoldReset(self, button):
+        if not self.hFlg:
+            print("On command not found")
+            sys.exit()
+        if self.rFlg:
+            print("Stop command not found")
+            sys.exit()
+        if self.button != button:
+            print("Button is mismatched")
+            sys.exit()
+        self.hFlg = False
+
+    def RepeatSet(self, button):
+        if self.hFlg:
+            print("Off command not found")
+            sys.exit()
+        if self.rFlg:
+            print("Stop command not found")
+            sys.exit()
+        self.button = button
+        self.rFlg = True
+
+    def RepeatReset(self, button):
+        if self.hFlg:
+            print("Off command not found")
+            sys.exit()
+        if not self.rFlg:
+            print("Start command not found")
+            sys.exit()
+        if self.button != button:
+            print("Button is mismatched")
+            sys.exit()
+        self.rFlg = False
 
 
 def output(btn, mode: OutputMode):
@@ -95,42 +154,56 @@ def main(filepath):
     # データー読込
     startButton: str
     list = []
+    Flg = State()
+    tmg = None
+    tmp = None
     t1: datetime.timedelta
     t2: datetime.timedelta
+    minimum = datetime.timedelta.max
     for i in range(len(lines) - 1):
         cell = lines[i + 1].lower().split(",")
         btn = cell[0][:1]
         cmd = cell[0][1:]
+        tmp = tmg
         tmg = datetime.datetime.strptime(cell[2], "%H:%M:%S:%f")
-        # print(btn, ":", cmd, ":", tmg.strftime("%H:%M:%S:%f"))
+        if not tmp is None and tmg - tmp < minimum:
+            minimum = tmg - tmp
+        print(i + 2, ":", btn, ":", cmd, ":", tmg.strftime("%H:%M:%S:%f"))
         if i == 0:
             startButton = btn
             st = tmg
             # print(startButton, st.strftime("%H:%M:%S:%f"))
         elif not cmd:
-            obj = click(btn, tmg - st)
+            Flg.CheckReset()
+            t1 = tmg - st
+            obj = Click(btn, t1)
             list.append(obj)
             # print(obj.button, obj.timing.total_seconds())
         elif cmd == "on":
+            Flg.HoldSet(btn)
             t1 = tmg - st
         elif cmd == "off":
+            Flg.HoldReset(btn)
             t2 = tmg - st
-            obj = hold(btn, t1, t2)
+            obj = Hold(btn, t1, t2)
             list.append(obj)
             # print(obj.button, obj.startTime.total_seconds(), obj.stopTime.total_seconds())
         elif cmd == "start":
+            Flg.RepeatSet(btn)
             t1 = tmg - st
         elif cmd == "stop":
+            Flg.RepeatReset(btn)
             t2 = tmg - st
             # print("repeat", btn, t1.total_seconds(), t2.total_seconds())
             while t1 + datetime.timedelta(seconds=0.05) < t2:
-                obj = click(btn, t1)
+                obj = Click(btn, t1)
                 list.append(obj)
                 # print(obj.button, obj.timing.total_seconds())
                 t1 += datetime.timedelta(seconds=0.1)
         else:
             print("Command error!")
             sys.exit()
+    print("Minimum Interval:", minimum)
     # 開始待ち
     print("Wait", startButton, "Button")
     while True:
@@ -146,12 +219,12 @@ def main(filepath):
     print("Start", startTime)
     while len(list) > 0:
         now = datetime.datetime.now()
-        if type(list[0]) is click:
+        if type(list[0]) is Click:
             if list[0].timing <= now - startTime:
                 print(now - startTime, list[0].button)
                 output(list[0].button, OutputMode.ONE)
                 list.pop(0)
-        elif type(list[0]) is hold:
+        elif type(list[0]) is Hold:
             if not list[0].state and list[0].startTime <= now - startTime:
                 print(now - startTime, list[0].button, "ON")
                 output(list[0].button, OutputMode.ON)
