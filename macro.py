@@ -23,10 +23,6 @@ xOut = gpiozero.LED(8)
 oOut = gpiozero.LED(12)
 r2Out = gpiozero.LED(13)
 l2Out = gpiozero.LED(19)
-sIn = gpiozero.Button(21)
-tIn = gpiozero.Button(20)
-xIn = gpiozero.Button(26)
-oIn = gpiozero.Button(16)
 
 
 class Click:
@@ -152,7 +148,6 @@ def main(filepath):
     with codecs.open(filepath, "r", "utf8") as f:
         lines = f.readlines()
     # データー読込
-    startButton: str
     list = []
     Flg = State()
     tmg = None
@@ -170,10 +165,9 @@ def main(filepath):
             minimum = tmg - tmp
         print(i + 2, ":", btn, ":", cmd, ":", tmg.strftime("%H:%M:%S:%f"))
         if i == 0:
-            startButton = btn
             st = tmg
-            # print(startButton, st.strftime("%H:%M:%S:%f"))
-        elif not cmd:
+            # print(st.strftime("%H:%M:%S:%f"))
+        if not cmd:
             Flg.CheckReset()
             t1 = tmg - st
             obj = Click(btn, t1)
@@ -205,15 +199,7 @@ def main(filepath):
             sys.exit()
     print("Minimum Interval:", minimum)
     # 開始待ち
-    print("Wait", startButton, "Button")
-    while True:
-        if (
-            (startButton == "s" and sIn.is_active)
-            or (startButton == "t" and tIn.is_active)
-            or (startButton == "x" and xIn.is_active)
-            or (startButton == "o" and oIn.is_active)
-        ):
-            break
+    input("Hit Enter Key")
     # 出力
     startTime = datetime.datetime.now()
     print("Start", startTime)
